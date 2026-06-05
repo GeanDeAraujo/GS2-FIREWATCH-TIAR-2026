@@ -426,12 +426,14 @@ aws lambda invoke \
 
 | Nome | RM | Turma |
 |------|----|-------|
-| — | — | — |
+| Gean Junio Ferreira de Araujo | rm567167 | TIAR |
+| Victor Copque dos Reis | rm566821 | TIAR |
+| Victor Hugo Ferreira Rolim | rm568006 | TIAR |
 
 ## 👨‍🏫 Professores
 
-- **Tutor:** —
-- **Coordenador:** —
+- **Tutor: Ana Cristina dos Santos —
+- **Coordenador:** — André Godoi Chiovato
 
 ---
 
