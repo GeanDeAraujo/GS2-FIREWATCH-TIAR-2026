@@ -1,0 +1,10 @@
+path: /Users/geanjfa/dev.portfolio/FireWatch/training/datasets/firewatch
+train: images/train
+val: images/val
+test: images/test
+
+nc: 3
+names:
+  0: foco_ativo
+  1: fumaca
+  2: area_queimada

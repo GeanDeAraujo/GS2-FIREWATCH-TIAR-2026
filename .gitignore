@@ -1,0 +1,64 @@
+# Environment (never commit credentials)
+.env
+.env.local
+dashboard/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+*.so
+
+# Lambda build artifacts
+lambda/processor.zip
+lambda/processor/layer/
+
+# YOLO model weights (large binary files)
+models/*.pt
+models/*.onnx
+
+# Terraform
+infrastructure/.terraform/
+infrastructure/.terraform.lock.hcl
+infrastructure/terraform.tfvars
+infrastructure/terraform.tfstate
+infrastructure/terraform.tfstate.backup
+infrastructure/*.tfplan
+
+# Node / Dashboard
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.vite/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Docker build artifacts
+lambda/*.tar
+lambda/.docker/
+
+# Training artifacts
+training/runs/
+training/datasets/
+training/*.pt
+training/*.onnx
+
+# Logs
+*.log
+logs/

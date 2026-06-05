@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars and fill in values (terraform.tfvars is git-ignored)
+
+aws_region   = "sa-east-1"
+environment  = "prod"
+project_name = "firewatch"
+
+lambda_memory_mb       = 2048
+lambda_timeout_seconds = 300
+
+yolo_confidence_threshold = "0.75"
+
+# Optional — leave empty to skip SNS subscriptions
+alert_email = ""   # e.g. "bombeiros@example.gov.br"
+alert_phone = ""   # E.164 format e.g. "+5511999999999"
