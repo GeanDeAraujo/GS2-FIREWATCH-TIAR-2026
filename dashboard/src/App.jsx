@@ -46,7 +46,7 @@ export default function App() {
           padding: "6px 16px", background: "#1a0d0d", color: "#ff6b6b",
           fontSize: "11px", borderBottom: "1px solid #2a1a1a",
         }}>
-          ⚠ API não conectada: {error} — configure VITE_API_BASE_URL em dashboard/.env
+          ⚠ API indisponível: {error}
         </div>
       )}
 
