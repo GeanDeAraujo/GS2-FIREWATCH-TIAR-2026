@@ -77,11 +77,11 @@ A solução híbrida é a mesma abordagem usada por sistemas reais: **FIRMS como
 
 ### Classes detectadas
 
-| Classe | Descrição | Exemplos de fonte |
-|--------|-----------|-------------------|
-| `foco_ativo` | Chamas visíveis / calor intenso | Câmeras, drones, imagens IR |
-| `fumaca` | Pluma de fumaça em dispersão | Câmeras de longo alcance |
-| `area_queimada` | Solo enegrecido pós-queima | Imagens de satélite |
+| Classe | Ícone no mapa | Descrição | Exemplos de fonte |
+|--------|---------------|-----------|-------------------|
+| `foco_ativo` | 🔴 Círculo com anel pulsante (ALTA) | Chamas visíveis / calor intenso | Câmeras, drones, imagens IR |
+| `fumaca` | 🌫️ Nuvem cinza/azul | Pluma de fumaça em dispersão | Câmeras de longo alcance |
+| `area_queimada` | 🟫 Quadrado marrom | Solo enegrecido pós-queima | Imagens de satélite |
 
 ### Processo de treinamento
 
@@ -95,15 +95,52 @@ O modelo foi treinado do zero — não havia nenhum modelo no projeto original:
 
 ### Tentativa de fine-tuning satelital
 
-Após o treinamento base, tentamos um fine-tuning em imagens MODIS reais para que o YOLO detectasse focos diretamente nas tiles satelitais:
+Após o treinamento base, tentamos um fine-tuning em imagens MODIS reais:
 
-- **Script:** `training/build_satellite_dataset.py` — cria anotações pseudo-label a partir de coordenadas FIRMS em tiles MODIS (zoom 9, ~250m/pixel)
-- **Dataset gerado:** 119 tiles com 815 bounding boxes
+- **Script:** `training/build_satellite_dataset.py` — 119 tiles MODIS com 815 bounding boxes pseudo-label
 - **Resultado:** mAP = 0.003 — inviável
-- **Motivo:** YOLO detecta padrões visuais (textura, cor, forma). Em resolução de 250m/pixel, um foco de incêndio é 1-2 pixels sem padrão visual reconhecível. Detecção satelital real usa algoritmos especializados em bandas SWIR/NIR (não RGB).
+- **Motivo:** YOLO detecta padrões visuais (textura, cor, forma). Em 250m/pixel, um foco é 1-2 pixels sem padrão reconhecível. Detecção satelital real exige bandas SWIR/NIR, não RGB.
 - **Decisão:** manter modelo original (mAP=0.902) + pipeline FIRMS para dados satelitais
 
-Os scripts e configs estão mantidos em `training/` como documentação da abordagem.
+---
+
+## 🖥️ Dashboard — Funcionalidades
+
+O dashboard React exibe dados em tempo real com interatividade completa:
+
+### Navegação mapa ↔ lista
+- **Clique num item da lista** → mapa voa automaticamente (`flyTo`) para o foco com zoom 10 e abre o popup
+- **Clique num marcador no mapa** → seleciona o item correspondente na lista lateral (borda laranja)
+
+### Filtros por satélite (Header)
+Os badges de satélite são botões de filtro com toggle:
+
+| Badge | Filtra por |
+|-------|-----------|
+| 🛰 NASA FIRMS | Hotspots CSV do FIRMS |
+| 🌍 MODIS Terra | Tiles de imagem MODIS |
+| 📡 Sentinel-2 | Imagens Copernicus |
+| 🇧🇷 IBAMA/SISFOGO | Dados IBAMA |
+
+### Filtros inline no painel
+- **Por classe:** Todos | 🔥 Foco | 💨 Fumaça | 🟫 Queimada
+- **Por severidade:** Todas | ALTA | MEDIA | BAIXA
+- Todos os filtros são combinados e se aplicam simultaneamente ao mapa e à lista
+
+### Diferenciação visual no mapa
+- `foco_ativo` ALTA → círculo vermelho com **anel pulsante animado** (CSS `@keyframes`)
+- `foco_ativo` MEDIA/BAIXA → círculo sólido laranja/amarelo
+- `fumaca` → **ícone de nuvem** cinza/azul distinto (SVG com elipses)
+- `area_queimada` → quadrado marrom com X hachurado
+
+### Informações de alerta
+- Cada detecção mostra se alerta SNS foi enviado (`✓ Alertado`)
+- Aba Alertas exibe: horário de detecção + "mesmo ciclo (≤ 15 min)"
+- FRP (Fire Radiative Power em MW) exibido para hotspots FIRMS
+
+### Storytelling dinâmico
+- Header e painel lateral exibem narrativa contextual baseada nos dados ao vivo
+- Exemplo: *"126 focos ativos detectados em 8 estados nas últimas 72h. Estado mais afetado: MT. Último ciclo às 14:32."*
 
 ---
 
@@ -125,65 +162,66 @@ FireWatch/
 │   ├── ecr.tf                        # ECR repo para imagem Docker da Lambda
 │   ├── eventbridge.tf                # Trigger cron a cada 15 minutos
 │   ├── sns.tf                        # Tópico SNS para alertas
-│   ├── api_gateway.tf                # REST API: /detections, /stats, /alerts
+│   ├── api_gateway.tf                # REST API: /detections, /stats, /alerts + CORS
 │   └── terraform.tfvars.example      # Template de variáveis (nunca commitar .tfvars)
 │
 ├── lambda/
-│   ├── Dockerfile                    # Imagem Docker (Amazon Linux 2, CPU-only PyTorch)
+│   ├── Dockerfile                    # Amazon Linux 2, CPU-only PyTorch, mesa-libGL
 │   ├── requirements.txt              # ultralytics 8.4.60, boto3, Pillow, opencv-headless
-│   ├── build_and_push.sh             # Script: build → ECR → update Lambda
+│   ├── build_and_push.sh             # build linux/amd64 --provenance=false → ECR → update Lambda
 │   └── processor/
-│       ├── handler.py                # Entry point: pipeline híbrida FIRMS + YOLO
-│       ├── api_handler.py            # Handler da Lambda API (routes: /detections /stats /alerts)
-│       ├── detector.py               # Wrapper YOLO v8 — baixa modelo do S3 no cold start
-│       ├── config.py                 # Env vars, thresholds, caminhos S3
+│       ├── handler.py                # Pipeline híbrida: FIRMS CSV + YOLO imagens
+│       ├── api_handler.py            # Rotas: /detections /stats /alerts (CORS headers)
+│       ├── detector.py               # YOLO v8 wrapper — baixa modelo S3 no cold start
+│       ├── config.py                 # Env vars, thresholds, bbox Brasil
 │       └── services/
-│           ├── dynamodb_service.py   # CRUD detecções, scan por estado/hora, stats agregadas
-│           ├── s3_service.py         # Download de imagens do S3
-│           └── sns_service.py        # Publicação de alertas no SNS
+│           ├── dynamodb_service.py   # save_detection() → (id, ts), scan, stats, alerts
+│           ├── s3_service.py         # download/list imagens S3
+│           └── sns_service.py        # publish_alert() com severidade e estado
 │
 ├── collectors/
-│   ├── config.py                     # Configurações compartilhadas dos collectors
-│   ├── nasa_firms.py                 # NASA FIRMS API — hotspots VIIRS/MODIS → S3 CSV
-│   ├── inpe.py                       # INPE/FIRMS área BR — fallback após API INPE offline
-│   ├── sentinel2.py                  # Sentinel-2 (Copernicus) — imagens RGB+NIR → S3
-│   ├── fetch_modis_tiles.py          # NASA GIBS WMTS — tiles MODIS true-color → S3
-│   ├── seed_demo_data.py             # Injeta 60 detecções demo no DynamoDB para apresentação
-│   └── run_collectors.sh             # Script shell: roda todos os collectors sequencialmente
+│   ├── config.py                     # Configurações compartilhadas
+│   ├── nasa_firms.py                 # FIRMS API → hotspots VIIRS/MODIS → S3 CSV
+│   ├── inpe.py                       # Fallback FIRMS área Brasil (API INPE offline)
+│   ├── sentinel2.py                  # Sentinel-2 Copernicus → imagens RGB+NIR → S3
+│   ├── fetch_modis_tiles.py          # NASA GIBS WMTS → tiles MODIS true-color → S3
+│   ├── seed_demo_data.py             # Injeta 60 detecções demo no DynamoDB
+│   └── run_collectors.sh             # Roda todos os collectors com .env ativado
 │
 ├── notifications/
-│   ├── telegram_bot.py               # Bot Telegram para alertas à Defesa Civil
-│   └── webhook_sender.py             # Webhook HTTP para notificação ao IBAMA
+│   ├── telegram_bot.py               # Bot Telegram — alertas à Defesa Civil
+│   └── webhook_sender.py             # Webhook HTTP — notificações ao IBAMA
 │
 ├── training/
-│   ├── train.py                      # Script de treino YOLO v8n (50 épocas, M2 MPS)
-│   ├── data.yaml                     # Config dataset principal (3 classes)
-│   ├── data_satellite.yaml           # Config dataset satelital (fine-tuning — abandonado)
-│   ├── prepare_dataset.py            # Organiza dataset HuggingFace em splits YOLO
+│   ├── train.py                      # Treino YOLO v8n (50 épocas, M2 MPS) → mAP=0.902
+│   ├── data.yaml                     # Config dataset 3 classes: foco_ativo, fumaca, area_queimada
+│   ├── data_satellite.yaml           # Config dataset satelital (fine-tuning — mAP=0.003, abandonado)
+│   ├── prepare_dataset.py            # Organiza HuggingFace dataset em splits YOLO 70/20/10
 │   ├── download_datasets.py          # Baixa datasets públicos (D-Fire, Roboflow)
-│   ├── build_satellite_dataset.py    # Cria anotações pseudo-label de tiles MODIS + FIRMS
-│   └── requirements.txt             # Dependências de treino (ultralytics, torch com MPS)
+│   ├── build_satellite_dataset.py    # Pseudo-label: FIRMS coords + MODIS tiles → 119 tiles, 815 labels
+│   └── requirements.txt              # torch + ultralytics + MPS support
 │
 ├── dashboard/
 │   ├── index.html
-│   ├── vite.config.js
+│   ├── vite.config.js                # Proxy /api → API Gateway (resolve CORS em dev)
 │   ├── package.json
+│   ├── .env.example                  # Template: VITE_API_BASE_URL=https://...
 │   └── src/
-│       ├── App.jsx                   # Polling 72h, layout flex dark
+│       ├── App.jsx                   # Estado global: filtros, focusedDetection, polling 72h
 │       ├── main.jsx
 │       ├── services/
-│       │   └── api.js                # fetchDetections / fetchStats / fetchAlerts → API Gateway
+│       │   └── api.js                # Dev: /api (proxy). Prod: URL completa
 │       └── components/
 │           ├── Header/
-│           │   └── Header.jsx        # Badges: NASA FIRMS, MODIS, IBAMA, YOLO v8n, estados afetados
+│           │   └── Header.jsx        # Badges satélite = botões filtro + storytelling dinâmico
 │           ├── Map/
-│           │   ├── FireMap.jsx       # Mapa Leaflet com clustering de marcadores
-│           │   └── FireMarker.jsx    # Popup: confiança %, severidade, modelo, técnica, estado, bioma
+│           │   ├── FireMap.jsx       # MapController (flyTo) + marcadores filtrados
+│           │   └── FireMarker.jsx    # Ícones distintos por classe + pulse ALTA + auto-popup
 │           └── AlertPanel/
-│               └── AlertPanel.jsx   # 2 abas (Alertas/Detecções), barra de confiança, info técnica
+│               └── AlertPanel.jsx   # Chips filtro, click→flyTo, FRP, timing alertas
 │
-├── .env.example                      # Template — copie para .env e preencha
-├── .gitignore
+├── .env.example                      # Template raiz — AWS, FIRMS, Sentinel, Telegram
+├── .gitignore                        # Exclui: .env, datasets/, runs/, *.pt, node_modules/
 └── Readme.md
 ```
 
@@ -203,8 +241,8 @@ FireWatch/
 ### 1. Clone e configure variáveis
 
 ```bash
-git clone <repo-url>
-cd FireWatch
+git clone git@github.com:GeanDeAraujo/GS2-FIREWATCH-TIAR-2026.git
+cd GS2-FIREWATCH-TIAR-2026
 cp .env.example .env
 # Edite .env com suas credenciais (nunca commitar este arquivo)
 ```
@@ -225,40 +263,37 @@ Anote os outputs: `api_gateway_url`, `s3_bucket_name`, `dynamodb_table_name`, `s
 
 ### 3. Treine o modelo YOLO (ou use o existente no S3)
 
-Se quiser treinar do zero:
-
 ```bash
 cd training
 pip install -r requirements.txt
-python prepare_dataset.py      # baixa e organiza o dataset
-python train.py                # treina 50 épocas (~30 min no M2 MPS)
+python prepare_dataset.py      # baixa e organiza o dataset (~239 imagens)
+python train.py                # 50 épocas (~30 min no M2 MPS)
 aws s3 cp runs/train/firewatch_v1/weights/best.pt \
     s3://<SEU_BUCKET>/models/firewatch_yolov8.pt
 ```
 
-> O modelo treinado fica no S3. A Lambda baixa automaticamente no cold start via `detector.py`.
+> O modelo fica no S3. A Lambda baixa automaticamente no cold start via `detector.py`.
 
 ### 4. Build e deploy da Lambda
 
 ```bash
 cd lambda
 chmod +x build_and_push.sh
-./build_and_push.sh   # faz build linux/amd64, push ECR, update Lambda
+./build_and_push.sh   # build linux/amd64, push ECR, update Lambda
 ```
 
-O script usa `--provenance=false` para garantir imagem single-arch (requisito AWS Lambda).
+O script usa `--provenance=false` para garantir imagem single-arch (requisito Lambda).
 
-### 5. Execute os collectors para popular dados
+### 5. Execute os collectors
 
 ```bash
-# Ativa o .env e roda todos os collectors
 bash collectors/run_collectors.sh
 
 # Ou individualmente:
 source .env
-python collectors/nasa_firms.py      # hotspots VIIRS → S3
-python collectors/fetch_modis_tiles.py  # tiles MODIS → S3
-python collectors/inpe.py            # focos INPE/FIRMS → S3
+python collectors/nasa_firms.py
+python collectors/fetch_modis_tiles.py
+python collectors/inpe.py
 ```
 
 ### 6. Invoque a Lambda manualmente (opcional)
@@ -276,12 +311,14 @@ aws lambda invoke \
 
 ```bash
 cd dashboard
-# Crie dashboard/.env com a URL da API:
-echo "VITE_API_BASE_URL=https://<seu-api-id>.execute-api.sa-east-1.amazonaws.com/prod" > .env
+cp .env.example .env
+# Edite .env: VITE_API_BASE_URL=https://<seu-api-id>.execute-api.sa-east-1.amazonaws.com/prod
 npm install
 npm run dev
 # Acesse http://localhost:3000
 ```
+
+> O Vite usa proxy `/api → API Gateway`, então não há erro de CORS em desenvolvimento.
 
 ---
 
@@ -302,7 +339,7 @@ Copie `.env.example` para `.env` e preencha:
 | `SENTINEL_CLIENT_SECRET` | Segredo do app Copernicus | [dataspace.copernicus.eu](https://dataspace.copernicus.eu/) → My Account |
 | `TELEGRAM_BOT_TOKEN` | Token do bot Telegram | [@BotFather](https://t.me/BotFather) → `/newbot` |
 | `TELEGRAM_CHAT_ID` | ID do chat para alertas | `https://api.telegram.org/bot<TOKEN>/getUpdates` |
-| `YOLO_CONFIDENCE_THRESHOLD` | Threshold de confiança (padrão: `0.75`) | Ajuste conforme necessidade |
+| `YOLO_CONFIDENCE_THRESHOLD` | Threshold de confiança (padrão: `0.75`) | — |
 | `YOLO_MODEL_S3_KEY` | Caminho do modelo no S3 | Ex: `models/firewatch_yolov8.pt` |
 
 ---
@@ -317,7 +354,7 @@ Hotspots FIRMS são classificados por **FRP (Fire Radiative Power)** em megawatt
 | 50–200 MW | `foco_ativo` | MEDIA | ~0.91 |
 | < 50 MW | `fumaca` | BAIXA | 0.90 |
 
-Fórmula de confiança: `min(0.99, 0.90 + frp / 10000)` — calibrada para FRP típico de incêndios no Cerrado e Amazônia.
+Fórmula: `min(0.99, 0.90 + frp / 10000)` — calibrada para FRP típico de incêndios no Cerrado e Amazônia.
 
 ---
 
@@ -325,59 +362,49 @@ Fórmula de confiança: `min(0.99, 0.90 + frp / 10000)` — calibrada para FRP t
 
 | Decisão | Motivo |
 |---------|--------|
-| Pipeline FIRMS ao invés de YOLO para satelital | YOLO não funciona em imagens MODIS RGB (250m/pixel sem padrão visual) |
-| CPU-only PyTorch na Lambda | Lambda não tem GPU; `--index-url .../whl/cpu` reduz imagem de ~2.5GB para ~933MB |
-| Docker ao invés de .zip | `ultralytics` + `torch` + `opencv` excedem 250MB (limite do .zip Lambda) |
-| `yum` ao invés de `dnf` no Dockerfile | Base Amazon Linux 2 usa `yum`; `dnf` não está disponível |
-| `--provenance=false` no build Docker | Docker buildx cria manifest multi-arch que Lambda não suporta; flag força single-arch |
-| INPE API substituída por FIRMS área | `queimadas.dgi.inpe.br/api/` retorna 404 desde jun/2026 (migração de endpoint) |
-| `save_detection()` retorna `(id, timestamp)` | Lambda usava timestamps diferentes para save e mark_alert_sent, causando erro no update_item |
-| `ultralytics==8.4.60` (não latest) | Versões > 8.2 com PyTorch 2.6 causavam `UnpicklingError` na Lambda até esta versão |
+| Pipeline FIRMS como ground-truth satelital | YOLO não funciona em MODIS RGB (250m/pixel, sem padrão visual detectável) |
+| CPU-only PyTorch na Lambda | Lambda sem GPU; índice `/whl/cpu` reduz imagem de ~2.5 GB para ~933 MB |
+| Docker ao invés de .zip | `ultralytics` + `torch` + `opencv` excedem 250 MB (limite .zip Lambda) |
+| `yum` ao invés de `dnf` no Dockerfile | Base Amazon Linux 2 usa `yum`; `dnf` não existe |
+| `--provenance=false` no build Docker | Docker buildx gera manifest multi-arch; Lambda exige single-arch |
+| INPE API substituída por FIRMS área | `queimadas.dgi.inpe.br/api/` retorna 404 desde jun/2026 |
+| `save_detection()` retorna `(id, timestamp)` | Timestamps divergentes causavam erro no `update_item` do DynamoDB |
+| `ultralytics==8.4.60` (pin) | Versões > 8.2 com PyTorch 2.6 causavam `UnpicklingError` no cold start Lambda |
+| Vite proxy `/api → API Gateway` | OPTIONS preflight retorna 403 da API ao vivo; proxy elimina cross-origin em dev |
+| Estado calculado client-side no dashboard | `_lat_lon_to_state()` no Lambda retorna "BR" para coordenadas fora das regras simples |
 
 ---
 
 ## 📡 API Endpoints
 
-Base URL: configurada via `VITE_API_BASE_URL` / API Gateway
+Base URL: `VITE_API_BASE_URL` (dashboard) ou diretamente via curl
 
 | Método | Endpoint | Descrição | Query Params |
 |--------|----------|-----------|--------------|
-| `GET` | `/detections` | Lista detecções recentes | `hours=72`, `limit=200`, `state=AM` |
+| `GET` | `/detections` | Detecções recentes | `hours=72`, `limit=200`, `state=AM` |
 | `GET` | `/stats` | Estatísticas agregadas 24h | — |
-| `GET` | `/alerts` | Alertas disparados | `limit=20` |
-
-Todos os endpoints retornam CORS headers para uso no dashboard.
+| `GET` | `/alerts` | Alertas SNS enviados | `limit=20` |
 
 ---
 
 ## 🔬 Validação End-to-End
 
 ```bash
-# 1. Verificar dados no DynamoDB (via API)
+# Stats ao vivo
 curl "https://<api-id>.execute-api.sa-east-1.amazonaws.com/prod/stats"
+# → {"total_focos": 126, "top_state": "MT", "states_affected": 8, ...}
 
-# 2. Ver últimas detecções
+# Últimas detecções
 curl "https://<api-id>.execute-api.sa-east-1.amazonaws.com/prod/detections?hours=24&limit=5"
 
-# 3. Invocar Lambda manualmente
+# Invocar Lambda manualmente
 aws lambda invoke \
   --function-name firewatch-processor-prod \
   --region sa-east-1 \
   --payload '{"source":"manual"}' \
   --cli-binary-format raw-in-base64-out \
   /tmp/result.json && cat /tmp/result.json
-```
-
-Resposta esperada:
-```json
-{
-  "statusCode": 200,
-  "body": {
-    "firms_hotspots_added": 4484,
-    "images_processed": 15,
-    "alerts_sent": 0
-  }
-}
+# → {"statusCode": 200, "body": {"firms_hotspots_added": 4484, "images_processed": 15, "alerts_sent": 0}}
 ```
 
 ---
@@ -390,7 +417,7 @@ Resposta esperada:
 | Cloud | AWS Lambda (Docker), S3, DynamoDB, SNS, EventBridge, API Gateway, ECR |
 | IaC | Terraform 1.5+ |
 | Containerização | Docker (linux/amd64, Amazon Linux 2) |
-| Frontend | React 18, Vite, Leaflet.js |
+| Frontend | React 18, Vite 5, Leaflet.js, react-leaflet |
 | Dados Satelitais | NASA FIRMS (VIIRS/MODIS), NASA GIBS WMTS, Sentinel-2 (Copernicus) |
 
 ---
