@@ -59,7 +59,9 @@ class TelegramAlertBot:
         payload = {
             "chat_id": self.chat_id,
             "text": text,
-            "parse_mode": "MarkdownV2",
+            # Markdown (legado): tolera ., -, (, ), % sem escape, ao contrário do
+            # MarkdownV2, que exigiria escapar esses caracteres e retornava 400.
+            "parse_mode": "Markdown",
             "disable_web_page_preview": False,
         }
 

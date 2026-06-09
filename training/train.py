@@ -25,8 +25,8 @@ from ultralytics import YOLO
 
 def parse_args():
     p = argparse.ArgumentParser(description="Train FireWatch YOLO v8 model")
-    p.add_argument("--base-model", default="yolov8s.pt",
-                   help="Base YOLO model: yolov8n.pt (fast) or yolov8s.pt (recommended)")
+    p.add_argument("--base-model", default="yolov8n.pt",
+                   help="Base YOLO model: yolov8n.pt (default, used by FireWatch) or yolov8s.pt (larger)")
     p.add_argument("--epochs", type=int, default=50)
     p.add_argument("--imgsz", type=int, default=640)
     p.add_argument("--batch", type=int, default=16)
@@ -61,7 +61,8 @@ def train(args):
 
     best_weights = Path("runs/train/firewatch_v1/weights/best.pt")
     print(f"\nTraining complete. Best weights: {best_weights}")
-    print(f"mAP50: {results.results_dict.get('metrics/mAP50(B)', 'N/A'):.4f}")
+    map50 = results.results_dict.get("metrics/mAP50(B)")
+    print(f"mAP50: {map50:.4f}" if isinstance(map50, (int, float)) else "mAP50: N/A")
 
     if args.upload_s3 and best_weights.exists():
         _upload_to_s3(best_weights, args.s3_bucket)
