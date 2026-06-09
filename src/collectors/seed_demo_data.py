@@ -16,7 +16,7 @@ import uuid
 import random
 from datetime import datetime, timedelta, timezone
 
-# A tabela real é firewatch-detections-<env> (ver infrastructure/dynamodb.tf).
+# A tabela real é firewatch-detections-<env> (ver src/infrastructure/dynamodb.tf).
 # Use o output do terraform: DYNAMODB_TABLE_NAME=$(terraform output -raw dynamodb_table_name)
 TABLE   = os.environ.get("DYNAMODB_TABLE_NAME", "firewatch-detections-dev")
 REGION  = os.environ.get("AWS_REGION", "sa-east-1")

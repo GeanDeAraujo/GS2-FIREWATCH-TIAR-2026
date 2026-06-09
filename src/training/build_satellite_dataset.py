@@ -10,7 +10,7 @@ Estratégia de pseudo-labeling:
 
 Uso:
   AWS_BUCKET_NAME=firewatch-raw-images AWS_REGION=sa-east-1 \
-  python training/build_satellite_dataset.py
+  python src/training/build_satellite_dataset.py
 """
 import csv, io, math, os, random, shutil
 from datetime import date, timedelta

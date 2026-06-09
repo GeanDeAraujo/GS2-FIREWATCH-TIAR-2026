@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Roda todos os collectors com as credenciais do .env
-# Uso: bash collectors/run_collectors.sh
+# Uso (a partir da raiz do repositório): bash src/collectors/run_collectors.sh
 set -euo pipefail
 
 if [ ! -f .env ]; then
@@ -14,7 +14,7 @@ PYTHON="/Users/geanjfa/anaconda3/envs/firewatch/bin/python"
 
 echo "=== 1/3 NASA FIRMS (VIIRS hotspots) ==="
 $PYTHON -c "
-import sys; sys.path.insert(0,'collectors')
+import sys; sys.path.insert(0,'src/collectors')
 from nasa_firms import NASAFirmsCollector
 import logging; logging.basicConfig(level=logging.INFO, format='%(levelname)s %(message)s')
 c = NASAFirmsCollector()
@@ -26,7 +26,7 @@ if spots: c.upload_to_s3(spots, source='VIIRS_SNPP_NRT')
 echo ""
 echo "=== 2/3 Sentinel-2 (imagens satélite) ==="
 $PYTHON -c "
-import sys, os, tempfile; sys.path.insert(0,'collectors')
+import sys, os, tempfile; sys.path.insert(0,'src/collectors')
 from sentinel2 import Sentinel2Collector
 import logging; logging.basicConfig(level=logging.INFO, format='%(levelname)s %(message)s')
 c = Sentinel2Collector()
@@ -42,7 +42,7 @@ for scene in scenes[:2]:
 echo ""
 echo "=== 3/3 INPE BDQueimadas ==="
 $PYTHON -c "
-import sys; sys.path.insert(0,'collectors')
+import sys; sys.path.insert(0,'src/collectors')
 from inpe import INPECollector
 import logging; logging.basicConfig(level=logging.INFO, format='%(levelname)s %(message)s')
 c = INPECollector()

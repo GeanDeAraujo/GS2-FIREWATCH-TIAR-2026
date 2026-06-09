@@ -42,7 +42,7 @@ def parse_args():
 def train(args):
     data_yaml = Path(__file__).parent / "data.yaml"
     if not data_yaml.exists():
-        raise FileNotFoundError("data.yaml not found. Run from the training/ directory.")
+        raise FileNotFoundError("data.yaml not found. Run from the src/training/ directory.")
 
     model = YOLO(args.base_model)
 

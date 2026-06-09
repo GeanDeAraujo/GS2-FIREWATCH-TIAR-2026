@@ -88,7 +88,7 @@ resource "aws_lambda_function" "processor" {
   memory_size   = var.lambda_memory_mb
   package_type  = "Image"
 
-  # Built and pushed by lambda/build_and_push.sh
+  # Built and pushed by src/lambda/build_and_push.sh
   image_uri = "${aws_ecr_repository.lambda_processor.repository_url}:latest"
 
   image_config {

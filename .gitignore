@@ -1,7 +1,7 @@
 # Environment (never commit credentials)
 .env
 .env.local
-dashboard/.env
+src/dashboard/.env
 
 # Python
 __pycache__/
@@ -20,25 +20,25 @@ build/
 *.so
 
 # Lambda build artifacts
-lambda/processor.zip
-lambda/processor/layer/
+src/lambda/processor.zip
+src/lambda/processor/layer/
 
 # YOLO model weights (large binary files)
 models/*.pt
 models/*.onnx
 
 # Terraform
-infrastructure/.terraform/
-infrastructure/.terraform.lock.hcl
-infrastructure/terraform.tfvars
-infrastructure/terraform.tfstate
-infrastructure/terraform.tfstate.backup
-infrastructure/*.tfplan
+src/infrastructure/.terraform/
+src/infrastructure/.terraform.lock.hcl
+src/infrastructure/terraform.tfvars
+src/infrastructure/terraform.tfstate
+src/infrastructure/terraform.tfstate.backup
+src/infrastructure/*.tfplan
 
 # Node / Dashboard
-dashboard/node_modules/
-dashboard/dist/
-dashboard/.vite/
+src/dashboard/node_modules/
+src/dashboard/dist/
+src/dashboard/.vite/
 
 # IDE
 .vscode/
@@ -50,14 +50,14 @@ dashboard/.vite/
 .DS_Store
 
 # Docker build artifacts
-lambda/*.tar
-lambda/.docker/
+src/lambda/*.tar
+src/lambda/.docker/
 
 # Training artifacts
-training/runs/
-training/datasets/
-training/*.pt
-training/*.onnx
+src/training/runs/
+src/training/datasets/
+src/training/*.pt
+src/training/*.onnx
 
 # Logs
 *.log

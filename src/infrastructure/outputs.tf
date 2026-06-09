@@ -49,6 +49,6 @@ output "ecr_repository_url" {
 }
 
 output "api_gateway_url" {
-  description = "API Gateway base URL — set as VITE_API_BASE_URL in dashboard/.env"
+  description = "API Gateway base URL — set as VITE_API_BASE_URL in src/dashboard/.env"
   value       = aws_api_gateway_stage.prod.invoke_url
 }

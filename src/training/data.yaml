@@ -1,4 +1,4 @@
-path: /Users/geanjfa/dev.portfolio/FireWatch/training/datasets/firewatch
+path: /Users/geanjfa/dev.portfolio/FireWatch/src/training/datasets/firewatch
 train: images/train
 val: images/val
 test: images/test
