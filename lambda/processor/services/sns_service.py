@@ -48,7 +48,9 @@ def publish_alert(
     if extra:
         payload.update(extra)
 
-    subject = f"[FireWatch] {severity} — {class_name.upper()} detectado em {state}"
+    # SNS exige Subject ASCII (sem acentos/traços longos), até 100 chars e sem
+    # quebras de linha — por isso usamos hífen comum em vez de em-dash.
+    subject = f"[FireWatch] {severity} - {class_name.upper()} detectado em {state}"[:100]
     message = json.dumps(payload, ensure_ascii=False)
 
     try:

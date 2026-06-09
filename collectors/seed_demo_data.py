@@ -10,14 +10,17 @@ Uso:
   AWS_REGION=sa-east-1 \
   python seed_demo_data.py
 """
+import os
 import boto3
 import uuid
 import random
 from datetime import datetime, timedelta, timezone
 
-TABLE   = "firewatch-detections"
-REGION  = "sa-east-1"
-BUCKET  = "firewatch-raw-images"
+# A tabela real é firewatch-detections-<env> (ver infrastructure/dynamodb.tf).
+# Use o output do terraform: DYNAMODB_TABLE_NAME=$(terraform output -raw dynamodb_table_name)
+TABLE   = os.environ.get("DYNAMODB_TABLE_NAME", "firewatch-detections-dev")
+REGION  = os.environ.get("AWS_REGION", "sa-east-1")
+BUCKET  = os.environ.get("AWS_BUCKET_NAME", "firewatch-raw-images")
 
 # Focos históricos reais do Brasil (lat, lon, estado, bioma)
 HOTSPOTS = [

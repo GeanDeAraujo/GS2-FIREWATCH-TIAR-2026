@@ -135,6 +135,27 @@ resource "aws_api_gateway_integration_response" "cors" {
 resource "aws_api_gateway_deployment" "prod" {
   rest_api_id = aws_api_gateway_rest_api.firewatch.id
 
+  # Re-deploy whenever any route/method/integration changes; without this the
+  # stage keeps serving the first deployment even after the API is edited.
+  # Hasheamos os recursos INTEIROS (não só os .id): editar um atributo in-place
+  # — ex.: o `uri` de uma integração, `request_templates` ou `authorization` —
+  # altera o corpo e portanto o hash, forçando o redeploy. Os .id, por serem
+  # derivados de rest_api_id/resource_id/http_method, não mudariam nesses casos.
+  triggers = {
+    redeployment = sha1(jsonencode([
+      aws_api_gateway_resource.detections,
+      aws_api_gateway_resource.stats,
+      aws_api_gateway_resource.alerts,
+      aws_api_gateway_method.detections_get,
+      aws_api_gateway_method.stats_get,
+      aws_api_gateway_method.alerts_get,
+      aws_api_gateway_integration.detections_get,
+      aws_api_gateway_integration.stats_get,
+      aws_api_gateway_integration.alerts_get,
+      aws_api_gateway_integration.cors,
+    ]))
+  }
+
   depends_on = [
     aws_api_gateway_integration.detections_get,
     aws_api_gateway_integration.stats_get,
@@ -154,6 +175,16 @@ resource "aws_api_gateway_stage" "prod" {
 
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.api_logs.arn
+    format = jsonencode({
+      requestId      = "$context.requestId"
+      ip             = "$context.identity.sourceIp"
+      requestTime    = "$context.requestTime"
+      httpMethod     = "$context.httpMethod"
+      resourcePath   = "$context.resourcePath"
+      status         = "$context.status"
+      responseLength = "$context.responseLength"
+      integrationErr = "$context.integration.error"
+    })
   }
 }
 

@@ -97,6 +97,14 @@ function MarkerInner({ detection, focused, onClick }) {
   const { latitude, longitude, class_name, confidence, timestamp, state, bioma, frp } = detection;
   const lat = parseFloat(latitude);
   const lon = parseFloat(longitude);
+
+  useEffect(() => {
+    if (focused && markerRef.current) {
+      markerRef.current.openPopup();
+    }
+  }, [focused]);
+
+  // Hooks acima de qualquer return condicional (regras de hooks do React).
   if (isNaN(lat) || isNaN(lon)) return null;
 
   const conf      = parseFloat(confidence) || 0;
@@ -104,12 +112,6 @@ function MarkerInner({ detection, focused, onClick }) {
   const sevColor  = SEV_COLOR[sev];
   const fonte     = sourceFromKey(detection);
   const biomaIcon = BIOMA_ICON[bioma] || "🌿";
-
-  useEffect(() => {
-    if (focused && markerRef.current) {
-      markerRef.current.openPopup();
-    }
-  }, [focused]);
 
   return (
     <Marker

@@ -45,9 +45,9 @@ data "aws_iam_policy_document" "lambda_permissions" {
   }
 
   statement {
-    sid    = "SNSPublish"
-    effect = "Allow"
-    actions = ["sns:Publish"]
+    sid       = "SNSPublish"
+    effect    = "Allow"
+    actions   = ["sns:Publish"]
     resources = [aws_sns_topic.alerts.arn]
   }
 
@@ -92,7 +92,7 @@ resource "aws_lambda_function" "processor" {
   image_uri = "${aws_ecr_repository.lambda_processor.repository_url}:latest"
 
   image_config {
-    command = ["processor.handler.lambda_handler"]
+    command = ["handler.lambda_handler"]
   }
 
   environment {
@@ -120,7 +120,7 @@ resource "aws_lambda_function" "api" {
   image_uri = "${aws_ecr_repository.lambda_processor.repository_url}:latest"
 
   image_config {
-    command = ["processor.api_handler.lambda_handler"]
+    command = ["api_handler.lambda_handler"]
   }
 
   environment {

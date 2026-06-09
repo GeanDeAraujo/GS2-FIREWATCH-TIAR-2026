@@ -12,7 +12,9 @@ import csv
 import io
 import logging
 import os
+import re
 import tempfile
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -39,6 +41,18 @@ _VALID_STATES = {
 _FRP_HIGH   = 200.0   # MW — foco_ativo ALTA
 _FRP_MEDIUM =  50.0   # MW — foco_ativo MEDIA
 _FIRMS_CONF =  0.90   # confiança padrão para hotspots FIRMS confirmados
+
+# Namespace fixo para gerar IDs determinísticos (uuid5) de hotspots FIRMS,
+# garantindo idempotência: o mesmo foco reprocessado sobrescreve seu registro
+# em vez de criar um novo a cada execução do EventBridge (a cada 15 min).
+_FIRMS_NAMESPACE = uuid.UUID("f1bea7c0-0000-4000-8000-000000000001")
+
+# Range key determinística para hotspots sem data de aquisição parseável.
+# Nunca usamos now() nesses casos — isso quebraria a idempotência (a range key
+# mudaria a cada ciclo). O sentinela agrupa esses registros no epoch; cada um
+# mantém detection_id único (derivado de fonte+coords+frp+key), então a dedup
+# pelo conditional put continua funcionando.
+_UNKNOWN_ACQ_TS = "1970-01-01T00:00:00+00:00"
 
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
@@ -95,15 +109,27 @@ def _process_firms_csvs(csv_keys: List[str]) -> int:
 
                     state = _lat_lon_to_state(lat, lon)
 
-                    detection_id, ts = save_detection(
+                    # Chave determinística (idempotência): mesmo foco → mesmo registro,
+                    # mesmo que o EventBridge relista os CSVs a cada 15 min.
+                    # A base do id NÃO usa relógio; quando não há data de aquisição,
+                    # usa-se o s3_key para distinguir focos de arquivos diferentes.
+                    acq_ts  = _acquisition_timestamp(row, s3_key)
+                    det_key = f"{fonte}|{lat:.4f}|{lon:.4f}|{frp}|{acq_ts or s3_key}"
+                    det_id  = str(uuid.uuid5(_FIRMS_NAMESPACE, det_key))
+                    record_ts = acq_ts or _UNKNOWN_ACQ_TS
+
+                    detection_id, ts, created = save_detection(
                         latitude=lat, longitude=lon,
                         class_name=cls, confidence=conf,
                         area_px=frp * 100,
                         image_key=s3_key, state=state,
                         extra={"fonte": fonte, "frp": str(frp), "severity": sev},
+                        detection_id=det_id, timestamp=record_ts,
+                        idempotent=True,
                     )
 
-                    if conf >= YOLO_CONFIDENCE_THRESHOLD and frp >= _FRP_MEDIUM:
+                    # Só alerta hotspots novos — evita reenvio de SNS a cada ciclo.
+                    if created and conf >= YOLO_CONFIDENCE_THRESHOLD and frp >= _FRP_MEDIUM:
                         publish_alert(
                             detection_id=detection_id, class_name=cls,
                             confidence=conf, latitude=lat, longitude=lon,
@@ -111,9 +137,10 @@ def _process_firms_csvs(csv_keys: List[str]) -> int:
                         )
                         mark_alert_sent(detection_id, ts)
 
-                    total += 1
-                    if total % 100 == 0:
-                        logger.info("FIRMS: %d hotspots inseridos...", total)
+                    if created:
+                        total += 1
+                        if total % 100 == 0:
+                            logger.info("FIRMS: %d novos hotspots inseridos...", total)
 
                 except (ValueError, KeyError):
                     pass
@@ -141,7 +168,7 @@ def _process_images(image_keys: List[str], tmp_dir: str) -> Tuple[int, int]:
             detections = _detector.detect(local_path)
 
             for det in detections:
-                detection_id, ts = save_detection(
+                detection_id, ts, _ = save_detection(
                     latitude=lat, longitude=lon,
                     class_name=det.class_name, confidence=det.confidence,
                     area_px=det.area_px, image_key=s3_key, state=state,
@@ -180,8 +207,51 @@ def _get_coordinates(s3_key: str) -> Tuple[float, float]:
     return (lat, lon) if lat is not None else (-14.235, -51.925)
 
 
+def _parse_dt(candidate: str) -> Optional[datetime]:
+    """Parse um string de data/hora em vários formatos; None se não casar."""
+    candidate = candidate.replace("Z", "").split("+")[0].strip()
+    if not candidate:
+        return None
+    try:
+        return datetime.fromisoformat(candidate)
+    except ValueError:
+        for fmt in ("%Y-%m-%dT%H%M", "%Y-%m-%dT%H:%M", "%Y-%m-%d", "%Y%m%d"):
+            try:
+                return datetime.strptime(candidate, fmt)
+            except ValueError:
+                continue
+    return None
+
+
+def _acquisition_timestamp(row: Dict[str, str], s3_key: str = "") -> Optional[str]:
+    """ISO timestamp (UTC) da aquisição do hotspot, ou None se indeterminável.
+
+    NASA FIRMS: colunas `acq_date` (YYYY-MM-DD) + `acq_time` (HHMM).
+    INPE:       coluna  `data_hora_gmt` (ex.: 2026-06-04T1342Z).
+    Fallback:   data AAAA-MM-DD embutida no path S3 (collectors usam prefixos datados).
+
+    Retorna None quando nada é parseável — o chamador NÃO deve usar relógio (now())
+    para a chave, senão a idempotência quebra (o registro duplicaria a cada ciclo).
+    """
+    raw = (row.get("data_hora_gmt") or "").strip()
+    if not raw:
+        date = (row.get("acq_date") or "").strip()
+        time = (row.get("acq_time") or "0000").strip().zfill(4)
+        raw = f"{date}T{time}" if date else ""
+
+    dt = _parse_dt(raw)
+    if dt is None:
+        m = re.search(r"(\d{4}-\d{2}-\d{2})", s3_key)
+        if m:
+            dt = _parse_dt(m.group(1))
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
 def _parse_coords_from_key(s3_key: str) -> Tuple[Optional[float], Optional[float]]:
-    import re
     m = re.search(r"lat_(-?\d+\.?\d*)_lon_(-?\d+\.?\d*)", s3_key)
     if m:
         return float(m.group(1)), float(m.group(2))
